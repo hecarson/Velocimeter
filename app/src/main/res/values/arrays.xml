@@ -1,0 +1,15 @@
+<resources>
+    <string-array name="speed_unit_entries">
+        <item>Meters per second (m/s)</item>
+        <item>Feet per second (ft/s)</item>
+        <item>Kilometers per hour (KPH)</item>
+        <item>Miles per hour (MPH)</item>
+    </string-array>
+
+    <string-array name="speed_unit_values">
+        <item>mps</item>
+        <item>fps</item>
+        <item>kph</item>
+        <item>mph</item>
+    </string-array>
+</resources>

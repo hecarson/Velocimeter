@@ -3,6 +3,7 @@ package com.gmail.hecarson3.velocimeter
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.AlertDialog
+import android.content.Context
 import android.content.pm.PackageManager
 import android.hardware.Sensor
 import android.hardware.SensorEvent
@@ -17,6 +18,7 @@ import androidx.fragment.app.Fragment
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Button
 import android.widget.TextView
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
@@ -29,6 +31,7 @@ import com.google.android.gms.location.Granularity
 import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
+import com.google.android.material.floatingactionbutton.FloatingActionButton
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -38,42 +41,55 @@ import kotlinx.coroutines.withContext
 
 class VelocimeterFragment : Fragment() {
 
+    interface SettingsNavigator {
+        fun onSettingsNavigate()
+    }
+
+    private lateinit var compassView: CompassView
+    private lateinit var speedLabel: TextView
+    private lateinit var settingsButton: FloatingActionButton
+    private lateinit var debugLabel: TextView
+
+    private lateinit var settingsNavigator: SettingsNavigator
+
     private lateinit var sensorManager: SensorManager
-    private var accelerometerSensor: Sensor? = null
-    private var magnetometerSensor: Sensor? = null
+//    private var magnetometerSensor: Sensor? = null
+    private var rotationVectorSensor: Sensor? = null
     private lateinit var locationClient: FusedLocationProviderClient
 
     private lateinit var requestFineLocationPermissionLauncher: ActivityResultLauncher<String>
-    private var requestedLocationPermissions = false;
+    private var requestedLocationPermissions = false
 
-    private lateinit var compassView: CompassView
-    private lateinit var debugLabel: TextView
-
-    private var deviceGravity = FloatArray(3)
-    private var deviceMagneticField = FloatArray(3)
-    private val sensorAlpha = 0.8f
+//    private var deviceMagneticField = FloatArray(3)
+    private val rotationVector = FloatArray(4)
     private var compassAngleDeg = 0f
-    private val compassAngleAlpha = 0.5f
-    private var velocityBearing = 0f
+    private val compassAngleAlpha = 0.0f
+    private var velocityBearingDeg = 0f
 
     private lateinit var mainHandler: Handler
     private var count = 0
+
+    override fun onAttach(context: Context) {
+        super.onAttach(context)
+
+        settingsNavigator = context as SettingsNavigator
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         sensorManager = requireContext().getSystemService(SensorManager::class.java)
 
-        val accelerometerSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
-        val magnetometerSensor = sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)
-        if (accelerometerSensor == null) {
-            showErrorDialog("Unable to access accelerometer")
+//        val magnetometerSensor = sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)
+//        if (magnetometerSensor == null) {
+//            showErrorDialog("Unable to access magnetometer")
+//        }
+//        this.magnetometerSensor = magnetometerSensor
+        val rotationVectorSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
+        if (rotationVectorSensor == null) {
+            showErrorDialog("Unable to access rotation sensor")
         }
-        if (magnetometerSensor == null) {
-            showErrorDialog("Unable to access magnetometer")
-        }
-        this.accelerometerSensor = accelerometerSensor
-        this.magnetometerSensor = magnetometerSensor
+        this.rotationVectorSensor = rotationVectorSensor
 
         locationClient = LocationServices.getFusedLocationProviderClient(requireContext())
 
@@ -95,7 +111,11 @@ class VelocimeterFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
 
         compassView = view.findViewById(R.id.compassView)
+        speedLabel = view.findViewById(R.id.speedLabel)
+        settingsButton = view.findViewById(R.id.settingsButton)
         debugLabel = view.findViewById(R.id.debugLabel)
+
+        settingsButton.setOnClickListener(this::onSettingsButtonClick)
 
         lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
@@ -113,17 +133,22 @@ class VelocimeterFragment : Fragment() {
     override fun onResume() {
         super.onResume()
 
-        if (accelerometerSensor != null && magnetometerSensor != null) {
+//        if (accelerometerSensor != null && magnetometerSensor != null) {
+//            sensorManager.registerListener(
+//                accelerometerEventListener, accelerometerSensor,
+//                SensorManager.SENSOR_DELAY_NORMAL, 1_000_000
+//            )
+//            sensorManager.registerListener(
+//                magnetometerEventListener, magnetometerSensor,
+//                SensorManager.SENSOR_DELAY_NORMAL, 1_000_000
+//            )
+//
+//            Log.d(null, "registered sensors")
+//        }
+        if (rotationVectorSensor != null) {
             sensorManager.registerListener(
-                accelerometerEventListener, accelerometerSensor,
-                SensorManager.SENSOR_DELAY_NORMAL, 1_000_000
+                rotationSensorEventListener, rotationVectorSensor, 30_000
             )
-            sensorManager.registerListener(
-                magnetometerEventListener, magnetometerSensor,
-                SensorManager.SENSOR_DELAY_NORMAL, 1_000_000
-            )
-
-            Log.d(null, "registered sensors")
         }
 
         if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_DENIED) {
@@ -139,12 +164,13 @@ class VelocimeterFragment : Fragment() {
     override fun onPause() {
         super.onPause()
 
-        if (accelerometerSensor != null && magnetometerSensor != null) {
-            sensorManager.unregisterListener(accelerometerEventListener)
-            sensorManager.unregisterListener(magnetometerEventListener)
-
-            Log.d(null, "unregistered sensors")
-        }
+//        if (accelerometerSensor != null && magnetometerSensor != null) {
+//            sensorManager.unregisterListener(accelerometerEventListener)
+//            sensorManager.unregisterListener(magnetometerEventListener)
+//
+//            Log.d(null, "unregistered sensors")
+//        }
+        sensorManager.unregisterListener(rotationSensorEventListener)
 
         locationClient.removeLocationUpdates(this::onCurrentLocationUpdate)
     }
@@ -158,41 +184,38 @@ class VelocimeterFragment : Fragment() {
         alertDialog.show()
     }
 
-    private val accelerometerEventListener = object : SensorEventListener {
+//    private val magnetometerEventListener = object : SensorEventListener {
+//        override fun onSensorChanged(sensorEvent: SensorEvent) {
+//            for (i in 0..2)
+//                deviceMagneticField[i] = sensorEvent.values[i]
+//        }
+//
+//        override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+//    }
+    private val rotationSensorEventListener = object : SensorEventListener {
         override fun onSensorChanged(sensorEvent: SensorEvent) {
-            for (i in 0..2)
-                deviceGravity[i] = deviceGravity[i] * sensorAlpha + sensorEvent.values[i] * (1 - sensorAlpha)
+            for (i in 0..3)
+                rotationVector[i] = sensorEvent.values[i]
         }
 
-        override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
-    }
-
-    private val magnetometerEventListener = object : SensorEventListener {
-        override fun onSensorChanged(sensorEvent: SensorEvent) {
-            for (i in 0..2)
-                deviceMagneticField[i] = deviceMagneticField[i] * sensorAlpha + sensorEvent.values[i] * (1 - sensorAlpha)
-        }
-
-        override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+        override fun onAccuracyChanged(sensor: Sensor, accuracy: Int) {}
     }
 
     private suspend fun loopUpdateCompass() = withContext(Dispatchers.Default) {
         while (true) {
             val R = FloatArray(9)
-            val I = FloatArray(9)
-            val getRotationMatrixSuccess =
-                SensorManager.getRotationMatrix(R, I, deviceGravity, deviceMagneticField)
+            SensorManager.getRotationMatrixFromVector(R, rotationVector)
             val orientation = FloatArray(3)
             SensorManager.getOrientation(R, orientation)
 
-            if (getRotationMatrixSuccess) {
-                compassAngleDeg = compassAngleDeg * compassAngleAlpha +
-                        (-orientation[0] * 180f / Math.PI.toFloat()) * (1 - compassAngleAlpha)
+            compassAngleDeg = compassAngleDeg * compassAngleAlpha +
+                    (-orientation[0] * 180f / Math.PI.toFloat()) * (1 - compassAngleAlpha)
+//            val velocityAngleDeg = velocityBearingDeg - orientation[0]
+            val velocityAngleDeg = velocityBearingDeg + compassAngleDeg
 
-                mainHandler.post {
-                    compassView.update(compassAngleDeg, 0f)
+            mainHandler.post {
+                compassView.update(compassAngleDeg, velocityAngleDeg)
 //                    debugLabel.text = "compass angle ${compassAngleDeg}\ncount ${count++}"
-                }
             }
 
             delay(30)
@@ -203,7 +226,7 @@ class VelocimeterFragment : Fragment() {
         if (granted)
             requestLocationUpdates()
         else
-            showErrorDialog("The fine location permission is needed to accurately calculate speed")
+            showErrorDialog("The fine/precise location permission is needed to accurately calculate speed")
     }
 
     @SuppressLint("MissingPermission")
@@ -217,15 +240,24 @@ class VelocimeterFragment : Fragment() {
     }
 
     private fun onCurrentLocationUpdate(location: Location) {
-        debugLabel.text = "speed"
-
+        var debugLabelText = "speed"
         if (location.hasSpeed())
-            debugLabel.text = debugLabel.text.toString() + " ${location.speed}\n"
+            debugLabelText += " ${location.speed}"
+        debugLabelText += "\n"
 
         if (location.hasBearing())
-            velocityBearing = location.bearing
+            velocityBearingDeg = location.bearing
 
-        debugLabel.text = debugLabel.text.toString() + "latitude ${location.latitude}\nlongitude${location.longitude}"
+        debugLabelText += "latitude ${location.latitude}\nlongitude ${location.longitude}"
+
+        debugLabel.text = debugLabelText
+
+        val speedNumStr = String.format("%.1f", location.speed * 2.23694)
+        speedLabel.text = "$speedNumStr MPH"
+    }
+
+    private fun onSettingsButtonClick(view: View) {
+        settingsNavigator.onSettingsNavigate()
     }
 
 }

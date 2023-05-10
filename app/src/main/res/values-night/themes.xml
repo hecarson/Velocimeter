@@ -2,6 +2,10 @@
     <!-- Base application theme. -->
     <style name="Base.Theme.Velocimeter" parent="Theme.Material3.DayNight.NoActionBar">
         <!-- Customize your dark theme here. -->
-        <!-- <item name="colorPrimary">@color/my_dark_primary</item> -->
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:statusBarColor">@android:color/background_dark</item>
+        <item name="colorPrimary">#8BC34A</item>
+        <item name="colorSecondary">#E91E63</item>
+        <item name="backgroundTint">#7A2C47</item>
     </style>
 </resources>

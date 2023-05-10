@@ -7,14 +7,10 @@
         <item name="colorPrimary">#8BC34A</item>
         <item name="colorSecondary">#E91E63</item>
         <item name="backgroundTint">#C6466D</item>
-        <item name="android:preferenceFragmentStyle">@style/Theme.Velocimeter.Pref</item>
-        <item name="preferenceFragmentStyle">@style/Theme.Velocimeter.Pref</item>
     </style>
 
     <style name="Theme.Velocimeter" parent="Base.Theme.Velocimeter" />
 
     <style name="Theme.Velocimeter.Pref" parent="Theme.Material3.DayNight">
-        <item name="android:windowBackground">#00FF00</item>
-        <item name="android:textColorPrimary">#00FF00</item>
     </style>
 </resources>

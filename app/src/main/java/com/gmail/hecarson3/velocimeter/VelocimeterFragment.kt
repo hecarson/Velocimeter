@@ -4,6 +4,7 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.app.AlertDialog
 import android.content.Context
+import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.hardware.Sensor
 import android.hardware.SensorEvent
@@ -13,12 +14,10 @@ import android.location.Location
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.util.Log
 import androidx.fragment.app.Fragment
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.Button
 import android.widget.TextView
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
@@ -26,16 +25,15 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import androidx.preference.PreferenceManager
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.Granularity
 import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.google.android.material.floatingactionbutton.FloatingActionButton
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -45,21 +43,32 @@ class VelocimeterFragment : Fragment() {
         fun onSettingsNavigate()
     }
 
+    // Views
     private lateinit var compassView: CompassView
     private lateinit var speedLabel: TextView
     private lateinit var settingsButton: FloatingActionButton
-    private lateinit var debugLabel: TextView
+    private lateinit var debugMagnetometerLabel: TextView
+    private lateinit var debugLocationLabel: TextView
 
+    // Preferences
+    private lateinit var sharedPreferences: SharedPreferences
+    private var showDebugInfo = false
+    private var speedUnits = SpeedUnits.MPS
+
+    // Navigation callbacks
     private lateinit var settingsNavigator: SettingsNavigator
 
+    // Sensors
     private lateinit var sensorManager: SensorManager
 //    private var magnetometerSensor: Sensor? = null
     private var rotationVectorSensor: Sensor? = null
     private lateinit var locationClient: FusedLocationProviderClient
 
+    // Permissions
     private lateinit var requestFineLocationPermissionLauncher: ActivityResultLauncher<String>
     private var requestedLocationPermissions = false
 
+    // Velocimeter data
 //    private var deviceMagneticField = FloatArray(3)
     private val rotationVector = FloatArray(4)
     private var compassAngleDeg = 0f
@@ -77,6 +86,8 @@ class VelocimeterFragment : Fragment() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        sharedPreferences = PreferenceManager.getDefaultSharedPreferences(requireContext())
 
         sensorManager = requireContext().getSystemService(SensorManager::class.java)
 
@@ -113,7 +124,8 @@ class VelocimeterFragment : Fragment() {
         compassView = view.findViewById(R.id.compassView)
         speedLabel = view.findViewById(R.id.speedLabel)
         settingsButton = view.findViewById(R.id.settingsButton)
-        debugLabel = view.findViewById(R.id.debugLabel)
+        debugMagnetometerLabel = view.findViewById(R.id.debugMagnetometerLabel)
+        debugLocationLabel = view.findViewById(R.id.debugLocationLabel)
 
         settingsButton.setOnClickListener(this::onSettingsButtonClick)
 
@@ -132,6 +144,19 @@ class VelocimeterFragment : Fragment() {
 
     override fun onResume() {
         super.onResume()
+
+        showDebugInfo = sharedPreferences.getBoolean("debug_info", false)
+        speedUnits = when (sharedPreferences.getString("speed_units", "mps")) {
+            "mps" -> SpeedUnits.MPS
+            "fps" -> SpeedUnits.FPS
+            "kph" -> SpeedUnits.KPH
+            "mph" -> SpeedUnits.MPH
+            else -> SpeedUnits.MPS
+        }
+
+        val debugLabelVisibility = if (showDebugInfo) View.VISIBLE else View.GONE
+        debugMagnetometerLabel.visibility = debugLabelVisibility
+        debugLocationLabel.visibility = debugLabelVisibility
 
 //        if (accelerometerSensor != null && magnetometerSensor != null) {
 //            sensorManager.registerListener(
@@ -240,6 +265,12 @@ class VelocimeterFragment : Fragment() {
     }
 
     private fun onCurrentLocationUpdate(location: Location) {
+        val speedNumStr = String.format("%.1f", location.speed * 2.23694)
+        speedLabel.text = "$speedNumStr MPH"
+
+        if (!showDebugInfo)
+            return
+
         var debugLabelText = "speed"
         if (location.hasSpeed())
             debugLabelText += " ${location.speed}"
@@ -251,9 +282,6 @@ class VelocimeterFragment : Fragment() {
         debugLabelText += "latitude ${location.latitude}\nlongitude ${location.longitude}"
 
         debugLabel.text = debugLabelText
-
-        val speedNumStr = String.format("%.1f", location.speed * 2.23694)
-        speedLabel.text = "$speedNumStr MPH"
     }
 
     private fun onSettingsButtonClick(view: View) {

@@ -1,13 +1,13 @@
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
     <ListPreference
-        android:defaultValue="1"
+        android:defaultValue="mps"
         android:entries="@array/speed_unit_entries"
         android:entryValues="@array/speed_unit_values"
-        android:key="speedUnits"
+        android:key="speed_units"
         android:title="Speed units" />
     <SwitchPreference
         android:defaultValue="false"
-        android:key="debugInfo"
+        android:key="debug_info"
         android:title="Debug info" />
 </PreferenceScreen>
